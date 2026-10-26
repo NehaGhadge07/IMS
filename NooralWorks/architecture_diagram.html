@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IMS System Architecture Diagram</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 2rem;
+            background-color: #f8fafc;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            max-width: 1400px;
+            width: 100%;
+            overflow-x: auto;
+        }
+        h1 {
+            text-align: center;
+            color: #1e293b;
+            margin-bottom: 2rem;
+        }
+        /* Make the diagram stretch and be clearly visible */
+        .mermaid {
+            display: flex;
+            justify-content: center;
+        }
+    </style>
+    <!-- Load Mermaid from CDN -->
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>IMS Low-Level System Architecture</h1>
+        <pre class="mermaid">
+graph TD
+    %% Client Tier
+    subgraph Client ["Frontend (React 18 / Vite)"]
+        UI["React Pages & Components"]
+        Context["Local Storage (JWT & User Meta)"]
+        APIClient["API Service (services/api.js)"]
+        
+        UI -->|Reads Auth State| Context
+        UI -->|Initiates Data Request| APIClient
+        APIClient -->|Injects Bearer Token| APIClient
+    end
+
+    %% Network Boundary
+    APIClient == "HTTP/REST JSON" ==> Router
+
+    %% Backend Tier
+    subgraph Backend ["Backend Application (Node.js / Express)"]
+        Router["Express Router & CORS Configuration"]
+        
+        subgraph Middleware ["Middleware & Security Layer"]
+            AuthMid["Token Auth (authenticateToken)"]
+            RoleMid["RBAC (requireRole(['HR', 'Director']))"]
+            UploadMid["Multer File Parser (multipart/form-data)"]
+        end
+        
+        subgraph Controllers ["Route Controllers (/app/api/*.js)"]
+            AuthRoute["auth.js (Login, OTP)"]
+            InternRoute["interns.js (Profiles, Stats)"]
+            TaskRoute["tasks.js (Assign, Review)"]
+            FeeRoute["fees.js (Payments, Razorpay)"]
+            DocRoute["company.js & others"]
+        end
+        
+        subgraph CoreLogic ["Core Utilities & Data Access"]
+            AuthCore["Auth Logic (Bcrypt Hashing, jsonwebtoken)"]
+            DBSync["node:sqlite (Synchronous Driver)"]
+            FileSysOp["fs / path (File Operations)"]
+        end
+
+        %% Request Flow
+        Router --> AuthMid
+        AuthMid --> RoleMid
+        Router --> UploadMid
+        
+        RoleMid --> AuthRoute
+        RoleMid --> InternRoute
+        RoleMid --> TaskRoute
+        RoleMid --> FeeRoute
+        RoleMid --> DocRoute
+        UploadMid --> InternRoute
+        UploadMid --> DocRoute
+        
+        AuthRoute --> AuthCore
+        AuthRoute --> DBSync
+        InternRoute --> DBSync
+        TaskRoute --> DBSync
+        FeeRoute --> DBSync
+        DocRoute --> DBSync
+        
+        InternRoute --> FileSysOp
+        DocRoute --> FileSysOp
+    end
+
+    %% External Tier
+    subgraph External ["External Third-Party Services"]
+        SMTP["Nodemailer (SMTP Server)"]
+        Razorpay["Razorpay SDK (Payment Gateway)"]
+    end
+
+    AuthRoute -.->|Trigger OTP Emails| SMTP
+    FeeRoute -.->|Validate Signatures| Razorpay
+
+    %% Data Tier
+    subgraph Storage ["Persistent Storage Layer"]
+        SQLite[("SQLite DB (database/interns.db)")]
+        FileSystem>["Local File Directory (/uploads)"]
+    end
+
+    DBSync == "SQL Execution" ==> SQLite
+    FileSysOp == "Stream Write" ==> FileSystem
+        </pre>
+    </div>
+</body>
+</html>

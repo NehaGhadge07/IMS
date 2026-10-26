@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Performance Chart</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            background-color: #f8fafc; /* Matches slide background */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0;
+        }
+        .chart-container { 
+            width: 800px; 
+            background: transparent; 
+            padding: 20px; 
+        }
+    </style>
+</head>
+<body>
+    <div class="chart-container">
+        <canvas id="myChart"></canvas>
+    </div>
+    <script>
+        const ctx = document.getElementById('myChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['Week 1 (Manual)', 'Week 2 (Transition)', 'Week 3 (IMS Pilot)', 'Week 4 (Fully Automated)'],
+                datasets: [{
+                    label: 'Workflow Efficiency (%)',
+                    data: [40, 55, 75, 92],
+                    backgroundColor: '#0078D4', /* Corporate Blue */
+                    borderRadius: 4,
+                    barPercentage: 0.6
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: { 
+                        display: true, 
+                        text: 'Administrative Efficiency Trend', 
+                        font: { size: 24, weight: 'bold' },
+                        color: '#0f172a',
+                        padding: { bottom: 30 }
+                    },
+                    legend: { display: false }
+                },
+                scales: {
+                    y: { 
+                        beginAtZero: true, 
+                        max: 100, 
+                        title: { display: true, text: 'Efficiency Score (%)', font: { size: 14 } },
+                        grid: { color: '#e2e8f0' }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { font: { size: 14 } }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
