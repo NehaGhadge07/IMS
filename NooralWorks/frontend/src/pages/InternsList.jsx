@@ -204,8 +204,8 @@ export default function InternsList({ user }) {
 
           <div 
             className="stat-card clickable"
-            onClick={() => setShowMockModal(true)}
-            title="Click to manage Mock Assessments"
+            onClick={() => navigate('/placements')}
+            title="Click to manage Mock Assessments & Placements"
             style={{ cursor: 'pointer' }}
           >
             <div className="stat-icon" style={{ background: 'rgba(245, 158, 11, 0.1)', color: 'var(--color-warning)' }}>

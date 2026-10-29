@@ -1,6 +1,7 @@
 const { DatabaseSync } = require('node:sqlite');
 const path = require('path');
 const fs = require('fs');
+const { setSqliteDb, queueTableSync, syncAllTablesNow } = require('./mysql-sync');
 
 // Ensure database directory exists
 const dbDir = path.join(__dirname, '..', '..', '..', 'database');
@@ -12,6 +13,56 @@ const dbPath = path.join(dbDir, 'interns.db');
 console.log('Database path:', dbPath);
 
 const db = new DatabaseSync(dbPath);
+setSqliteDb(db);
+
+// Helper to extract table names modified by a SQL statement
+function extractTables(sql) {
+  if (typeof sql !== 'string') return [];
+  const tables = new Set();
+  const regex = /\b(?:INSERT(?:\s+OR\s+(?:REPLACE|IGNORE))?\s+INTO|UPDATE|DELETE\s+FROM|REPLACE\s+INTO)\s+[`"']?([a-zA-Z0-9_]+)[`"']?/gi;
+  let match;
+  while ((match = regex.exec(sql)) !== null) {
+    if (match[1]) tables.add(match[1]);
+  }
+  return Array.from(tables);
+}
+
+// Intercept prepare and exec so that every database write automatically syncs to MySQL iicet_ims
+const originalPrepare = db.prepare.bind(db);
+const originalExec = db.exec.bind(db);
+
+db.prepare = function(sql) {
+  const stmt = originalPrepare(sql);
+  const originalRun = stmt.run.bind(stmt);
+
+  stmt.run = function(...args) {
+    const res = originalRun(...args);
+    try {
+      const tables = extractTables(sql);
+      for (const t of tables) {
+        queueTableSync(t);
+      }
+    } catch (err) {
+      console.warn('[MySQL Sync Hook Warning]', err.message);
+    }
+    return res;
+  };
+
+  return stmt;
+};
+
+db.exec = function(sql) {
+  const res = originalExec(sql);
+  try {
+    const tables = extractTables(sql);
+    for (const t of tables) {
+      queueTableSync(t);
+    }
+  } catch (err) {
+    console.warn('[MySQL Sync Hook Warning]', err.message);
+  }
+  return res;
+};
 
 // Initialize schema
 try {

@@ -538,6 +538,17 @@ const api = {
     });
   },
 
+  async getSmtpStatus() {
+    return this.request('/auth/smtp-status');
+  },
+
+  async sendTestEmail(email) {
+    return this.request('/auth/test-email', {
+      method: 'POST',
+      body: JSON.stringify({ email })
+    });
+  },
+
   // Dashboard Operations
   async getDashboard() {
     return this.request('/dashboard');

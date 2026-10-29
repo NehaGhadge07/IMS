@@ -21,19 +21,10 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 
-// OTP handling
-const nodemailer = require('nodemailer');
+// OTP and Email Service
+const { sendOTPEmail, verifySMTP, sendEmail } = require('../core/email');
 // In‑memory store for OTPs (email -> {code, expiresAt})
 const otpStore = new Map();
-
-// Configure transport – expects EMAIL_USER and EMAIL_PASS env vars (Gmail)
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
 
 // Helper: generate 6‑digit code
 function generateOTP() {
@@ -41,7 +32,7 @@ function generateOTP() {
 }
 
 // POST /api/auth/request-otp – body: { email, isRegister, role }
-router.post('/request-otp', (req, res) => {
+router.post('/request-otp', async (req, res) => {
   const { email, isRegister, role } = req.body;
   if (!email) return res.status(400).json({ error: 'Email is required' });
 
@@ -63,52 +54,75 @@ router.post('/request-otp', (req, res) => {
   const expiresAt = Date.now() + 3 * 60 * 1000; // 3 min
   otpStore.set(normalizedEmail, { code, expiresAt, userId: user ? user.id : null });
 
-  const emailText = isRegister
-    ? `Welcome to IICET IMS!\n\nYou are registering for the position: ${role || 'Not specified'}.\n\nYour OTP code is ${code}. It will expire in 3 minutes.`
-    : `Your OTP code is ${code}. It will expire in 3 minutes.`;
+  // Send real email via SMTP
+  const result = await sendOTPEmail(normalizedEmail, code, !!isRegister, role);
+  if (!result.success && !result.simulated) {
+    return res.status(500).json({ error: `Failed to deliver OTP to ${email}: ${result.error}` });
+  }
 
-  // Send email
-  const mailOptions = {
-    from: `"IICET Services" <${process.env.EMAIL_USER}>`,
-    to: normalizedEmail,
-    subject: 'IICET IMS - Your OTP Verification Code',
-    text: emailText,
-    html: isRegister 
-      ? `<div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
-          <h2 style="color: #1d4ed8; margin-top: 0;">Welcome to IICET!</h2>
-          <p>You are registering for the position: <strong>${role || 'Not specified'}</strong>.</p>
-          <p>Your secure verification code is:</p>
-          <div style="background: #f1f5f9; padding: 12px; text-align: center; font-size: 24px; font-weight: bold; letter-spacing: 4px; border-radius: 6px; margin: 20px 0;">
-            ${code}
-          </div>
-          <p style="color: #64748b; font-size: 14px;">This code will expire in 3 minutes.</p>
-          <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
-          <p style="color: #94a3b8; font-size: 12px;">If you didn't request this code, you can safely ignore this email.</p>
-         </div>`
-      : `<div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
-          <h2 style="color: #1d4ed8; margin-top: 0;">IICET IMS Login</h2>
-          <p>Your secure verification code is:</p>
-          <div style="background: #f1f5f9; padding: 12px; text-align: center; font-size: 24px; font-weight: bold; letter-spacing: 4px; border-radius: 6px; margin: 20px 0;">
-            ${code}
-          </div>
-          <p style="color: #64748b; font-size: 14px;">This code will expire in 3 minutes.</p>
-          <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
-          <p style="color: #94a3b8; font-size: 12px;">If you didn't request this code, you can safely ignore this email.</p>
-         </div>`
-  };
-  transporter.sendMail(mailOptions, (err, info) => {
-    if (err) {
-      console.error('OTP email error:', err);
-      return res.status(500).json({ error: 'Failed to send OTP' });
-    }
-    console.log('OTP sent to', email, info.response);
-    res.json({ message: 'OTP sent' });
+  res.json({ 
+    message: result.simulated ? 'OTP generated (Simulated - set EMAIL_PASS in .env to send real email)' : 'OTP sent successfully to your email.' 
   });
 });
 
-// Helper: auto-register trainer attendance upon system login / active session
-function autoRegisterTrainerAttendance(userId, role) {
-  if (role !== 'Mentor' && role !== 'HR') return;
+// GET /api/auth/smtp-status - Check SMTP configuration and connectivity
+router.get('/smtp-status', async (req, res) => {
+  try {
+    const status = await verifySMTP();
+    res.json({
+      senderEmail: process.env.EMAIL_USER || 'Not set',
+      hasPassword: !!process.env.EMAIL_PASS,
+      ...status
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/auth/test-email - Trigger a live test email to verify Gmail SMTP
+router.post('/test-email', async (req, res) => {
+  const targetEmail = (req.body.email || process.env.EMAIL_USER || '').trim();
+  if (!targetEmail) {
+    return res.status(400).json({ error: 'Please provide a recipient email address or set EMAIL_USER in .env.' });
+  }
+
+  const result = await sendEmail({
+    to: targetEmail,
+    subject: 'IICET IMS - SMTP Connection Test Verification',
+    text: `Hello! This is a real-time verification email sent from your IICET Intern Management System via Gmail SMTP protocol. Your connection is active and operational!\n\nTimestamp: ${new Date().toLocaleString()}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; border: 1px solid #10b981; border-radius: 10px; background: #ffffff;">
+        <h2 style="color: #059669; margin-top: 0;">✅ SMTP Protocol Successfully Connected!</h2>
+        <p style="font-size: 14px; color: #334155;">
+          This is a live test email sent through your Google SMTP setup (<code>smtp.gmail.com</code>).
+        </p>
+        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 12px 16px; border-radius: 6px; font-size: 13px; color: #166534; margin: 16px 0;">
+          <strong>Sender:</strong> ${process.env.EMAIL_USER}<br/>
+          <strong>Recipient:</strong> ${targetEmail}<br/>
+          <strong>Server Time:</strong> ${new Date().toLocaleString()}
+        </div>
+        <p style="font-size: 12px; color: #64748b;">
+          IICET Services Private Limited • Intern Management System
+        </p>
+      </div>
+    `
+  });
+
+  if (!result.success) {
+    return res.status(500).json({ 
+      error: `Failed to deliver test email: ${result.error}`,
+      details: result.simulated ? 'EMAIL_PASS is empty in backend/.env' : 'Check your App Password.'
+    });
+  }
+
+  res.json({ 
+    message: `Test email dispatched successfully to ${targetEmail}! Check your inbox.`, 
+    messageId: result.messageId 
+  });
+});
+
+// Helper: auto-register user attendance upon system login / active session
+function autoRegisterUserAttendance(userId, role) {
   try {
     const now = new Date();
     const year = now.getFullYear();
@@ -124,7 +138,42 @@ function autoRegisterTrainerAttendance(userId, role) {
     if (totalMinutes >= 12 * 60) status = 'Half Day';
     else if (totalMinutes >= 10 * 60) status = 'Late';
 
-    if (role === 'Mentor') {
+    if (role === 'Intern') {
+      const intern = db.prepare('SELECT id, training_time FROM interns WHERE user_id = ?').get(userId);
+      if (intern) {
+        let internStatus = 'Present';
+        try {
+          const slot = intern.training_time || '09:00 AM - 01:00 PM';
+          const startTimePart = slot.split('-')[0].trim();
+          const parts = startTimePart.split(' ');
+          const hm = parts[0].split(':');
+          let startHours = parseInt(hm[0]);
+          const startMinutes = parseInt(hm[1]);
+          const ampm = parts[1] ? parts[1].toUpperCase() : 'AM';
+          if (ampm === 'PM' && startHours < 12) startHours += 12;
+          if (ampm === 'AM' && startHours === 12) startHours = 0;
+          const slotStartMinutes = startHours * 60 + startMinutes;
+          if (totalMinutes > slotStartMinutes + 15) {
+            internStatus = 'Late';
+          }
+        } catch (e) {
+          if (totalMinutes > 9 * 60 + 30) internStatus = 'Late';
+        }
+
+        const existing = db.prepare('SELECT id, check_in_time FROM attendance WHERE intern_id = ? AND date = ?').get(intern.id, today);
+        if (!existing) {
+          db.prepare('INSERT INTO attendance (intern_id, date, check_in_time, status) VALUES (?, ?, ?, ?)')
+            .run(intern.id, today, checkInTime, internStatus);
+          try {
+            db.prepare("INSERT INTO activity_logs (user_id, action, timestamp, details) VALUES (?, 'Attendance Check-In', ?, ?)")
+              .run(userId, now.toISOString(), `Intern attendance auto-registered on login at ${checkInTime}`);
+          } catch (e) {}
+        } else if (!existing.check_in_time) {
+          db.prepare('UPDATE attendance SET check_in_time = ?, status = ? WHERE id = ?')
+            .run(checkInTime, internStatus, existing.id);
+        }
+      }
+    } else if (role === 'Mentor') {
       const existing = db.prepare('SELECT id, check_in_time FROM mentor_attendance WHERE mentor_id = ? AND date = ?').get(userId, today);
       if (!existing) {
         db.prepare('INSERT INTO mentor_attendance (mentor_id, date, check_in_time, status, comments) VALUES (?, ?, ?, ?, ?)')
@@ -152,7 +201,7 @@ function autoRegisterTrainerAttendance(userId, role) {
       }
     }
   } catch (err) {
-    console.warn('autoRegisterTrainerAttendance warning:', err.message);
+    console.warn('autoRegisterUserAttendance warning:', err.message);
   }
 }
 
@@ -174,7 +223,7 @@ router.post('/verify-otp', (req, res) => {
   try {
     logActivity.run(user.id, 'User Login', new Date().toISOString(), 'Logged in with OTP verification');
     db.prepare("UPDATE users SET is_online = 1, last_active_at = ? WHERE id = ?").run(new Date().toISOString(), user.id);
-    autoRegisterTrainerAttendance(user.id, user.role);
+    autoRegisterUserAttendance(user.id, user.role);
   } catch (e) {
     // ignore
   }
@@ -259,7 +308,7 @@ router.post('/login-password', (req, res) => {
     try {
       logActivity.run(user.id, 'User Login', new Date().toISOString(), 'Logged in with password');
       db.prepare("UPDATE users SET is_online = 1, last_active_at = ? WHERE id = ?").run(new Date().toISOString(), user.id);
-      autoRegisterTrainerAttendance(user.id, user.role);
+      autoRegisterUserAttendance(user.id, user.role);
     } catch (e) {
       // ignore activity log error
     }
@@ -312,7 +361,7 @@ router.post('/login', (req, res) => {
     try {
       logActivity.run(user.id, 'User Login', new Date().toISOString(), `Logged in from IP/Client`);
       db.prepare("UPDATE users SET is_online = 1, last_active_at = ? WHERE id = ?").run(new Date().toISOString(), user.id);
-      autoRegisterTrainerAttendance(user.id, user.role);
+      autoRegisterUserAttendance(user.id, user.role);
     } catch (e) {
       // ignore
     }
@@ -424,7 +473,7 @@ router.get('/me', authenticateToken, (req, res) => {
     // Keep active session live and auto-mark attendance check-in for mentors/employees
     try {
       db.prepare("UPDATE users SET is_online = 1, last_active_at = ? WHERE id = ?").run(new Date().toISOString(), user.id);
-      autoRegisterTrainerAttendance(user.id, user.role);
+      autoRegisterUserAttendance(user.id, user.role);
     } catch (e) {}
 
     // Add additional details based on role
@@ -467,7 +516,23 @@ router.post('/logout', authenticateToken, (req, res) => {
 
     db.prepare("UPDATE users SET is_online = 0 WHERE id = ?").run(userId);
 
-    if (req.user.role === 'Mentor') {
+    if (req.user.role === 'Intern') {
+      const intern = db.prepare('SELECT id FROM interns WHERE user_id = ?').get(userId);
+      if (intern) {
+        const att = db.prepare('SELECT * FROM attendance WHERE intern_id = ? AND date = ?').get(intern.id, today);
+        if (att && att.check_in_time && !att.check_out_time) {
+          const ciParts = att.check_in_time.split(':');
+          const coParts = checkOutTime.split(':');
+          const ciMs = new Date(2000, 0, 1, parseInt(ciParts[0]), parseInt(ciParts[1] || 0), parseInt(ciParts[2] || 0));
+          const coMs = new Date(2000, 0, 1, parseInt(coParts[0]), parseInt(coParts[1] || 0), parseInt(coParts[2] || 0));
+          const workingHours = parseFloat(Math.max(0, (coMs - ciMs) / (1000 * 60 * 60)).toFixed(2));
+          let status = att.status;
+          if (workingHours < 1.5 && status !== 'Absent') status = 'Half Day';
+          db.prepare('UPDATE attendance SET check_out_time = ?, working_hours = ?, status = ? WHERE id = ?')
+            .run(checkOutTime, workingHours, status, att.id);
+        }
+      }
+    } else if (req.user.role === 'Mentor') {
       const att = db.prepare('SELECT * FROM mentor_attendance WHERE mentor_id = ? AND date = ?').get(userId, today);
       if (att && att.check_in_time && !att.check_out_time) {
         const ciParts = att.check_in_time.split(':');

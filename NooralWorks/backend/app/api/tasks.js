@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/connection');
 const { authenticateToken, requireRole } = require('../core/auth');
+const { sendTaskAssignedEmail } = require('../core/email');
 
 // Helper to get intern id from user id
 function getInternId(userId) {
@@ -218,6 +219,24 @@ router.post('/', authenticateToken, requireRole(['HR', 'Mentor', 'Director']), (
       INSERT INTO notifications (user_id, title, message)
       VALUES (?, ?, ?)
     `).run(notifyUserId, notifTitle, notifMessage);
+
+    // Send Real-time Email Notification to Assignee
+    try {
+      const recipientUser = db.prepare('SELECT name, email FROM users WHERE id = ?').get(notifyUserId);
+      if (recipientUser && recipientUser.email) {
+        sendTaskAssignedEmail({
+          to: recipientUser.email,
+          name: recipientUser.name,
+          taskTitle: title,
+          description: description,
+          priority: priority || 'Medium',
+          dueDate: due_date,
+          assignedByName: `${req.user.name} (${assignerRoleName})`
+        }).catch(e => console.error('Task assign email error:', e));
+      }
+    } catch (e) {
+      console.error('Task assign email prep error:', e);
+    }
 
     // Check if task is due tomorrow immediately
     checkTaskDueNotifications();

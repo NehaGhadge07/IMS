@@ -129,22 +129,22 @@ setInterval(() => {
       
       const dueFees = db.prepare('SELECT f.*, u.email, u.name FROM fees f JOIN interns i ON f.intern_id = i.id JOIN users u ON i.user_id = u.id WHERE f.due_date = ? AND f.status != "Fully Paid"').all(targetDateStr);
       
-      // send email
-      const nodemailer = require('nodemailer');
-      const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-          user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASS,
-        },
-      });
+      // send email via SMTP
+      const { sendEmail } = require('./app/core/email');
       
       dueFees.forEach(fee => {
-        transporter.sendMail({
-          from: process.env.EMAIL_USER,
+        sendEmail({
           to: fee.email,
-          subject: 'IICET IMS - Fee Installment Reminder',
-          text: `Dear ${fee.name}, your fee installment of Rs. ${fee.remaining_amount} is due on ${fee.due_date}.`
+          subject: 'IICET IMS - Fee Installment Reminder Notice',
+          text: `Dear ${fee.name}, your fee installment of Rs. ${fee.remaining_amount} is due on ${fee.due_date}. Please clear your dues with HR.`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 500px; padding: 20px; border: 1px solid #fed7aa; border-radius: 8px;">
+              <h3 style="color: #ea580c; margin-top: 0;">Fee Installment Due Notice</h3>
+              <p>Dear <strong>${fee.name}</strong>,</p>
+              <p>Your fee installment of <strong>₹${fee.remaining_amount}</strong> is due on <strong>${fee.due_date}</strong>.</p>
+              <p style="font-size: 12px; color: #64748b;">IICET Services Private Limited</p>
+            </div>
+          `
         }).catch(err => console.error(err));
       });
     } catch (e) {
@@ -167,4 +167,9 @@ setInterval(() => {
 // Start Server
 app.listen(PORT, () => {
   console.log(`Express server running on http://localhost:${PORT}`);
+  // Perform complete real-time sync with MySQL `iicet_ims` on boot
+  const { syncAllTablesNow } = require('./app/db/mysql-sync');
+  syncAllTablesNow().catch(err => {
+    console.warn('[MySQL Sync Warning] Failed to initialize startup sync:', err.message);
+  });
 });

@@ -18,9 +18,9 @@ export default function LeaveRequests({ user }) {
   const [reviewing, setReviewing] = useState(null);
   const [form, setForm] = useState({ leave_type: 'Casual', start_date: '', end_date: '', reason: '' });
 
-  const isDirector = user.role === 'Director';
-  const canReview = user.role === 'Director' || user.role === 'HR';
-  const canViewQueue = ['HR', 'Director'].includes(user.role);
+  const isDirector = user?.role === 'Director';
+  const canReview = user?.role === 'Director' || user?.role === 'HR';
+  const canViewQueue = ['HR', 'Director'].includes(user?.role);
 
   const load = async () => {
     try {
@@ -35,7 +35,7 @@ export default function LeaveRequests({ user }) {
 
   useEffect(() => {
     load();
-  }, [status, user.role]);
+  }, [status, user?.role]);
 
   const submit = async (event) => {
     event.preventDefault();

@@ -28,7 +28,9 @@ import {
   Hash,
   Copy,
   Check,
-  Edit3
+  Edit3,
+  Send,
+  AlertCircle
 } from 'lucide-react';
 
 export default function UserProfile({ user, setUser }) {
@@ -71,6 +73,33 @@ export default function UserProfile({ user, setUser }) {
   });
   const [companySaving, setCompanySaving] = useState(false);
   const [copiedKey, setCopiedKey] = useState(null);
+
+  // SMTP Protocol State (for HR & Director)
+  const [smtpStatus, setSmtpStatus] = useState(null);
+  const [testEmailAddr, setTestEmailAddr] = useState('neha.12ghadge@gmail.com');
+  const [testEmailLoading, setTestEmailLoading] = useState(false);
+  const [testEmailResult, setTestEmailResult] = useState(null);
+
+  useEffect(() => {
+    if (user?.role === 'HR' || user?.role === 'Director') {
+      api.getSmtpStatus().then(setSmtpStatus).catch(() => {});
+    }
+  }, [user]);
+
+  const handleSendTestEmail = async () => {
+    if (!testEmailAddr) return;
+    setTestEmailLoading(true);
+    setTestEmailResult(null);
+    try {
+      const res = await api.sendTestEmail(testEmailAddr);
+      setTestEmailResult({ type: 'success', message: res.message });
+      api.getSmtpStatus().then(setSmtpStatus).catch(() => {});
+    } catch (err) {
+      setTestEmailResult({ type: 'error', message: err.message || 'Failed to dispatch test email.' });
+    } finally {
+      setTestEmailLoading(false);
+    }
+  };
 
   const calculateAge = (dob) => {
     if (!dob) return 'N/A';
@@ -1101,6 +1130,104 @@ export default function UserProfile({ user, setUser }) {
                 {details?.performance_notes || 'Consistent high quality mentoring and excellent technical guidance provided to the interns.'}
               </p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Real-time SMTP Protocol & Email Gateway Card (HR & Director only) */}
+      {(profileData?.role === 'HR' || profileData?.role === 'Director') && (
+        <div className="card" style={{ padding: '1.75rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <h2 style={{ fontSize: '1.25rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800 }}>
+              <Mail size={22} color="var(--color-primary)" /> SMTP Protocol & Email Gateway
+            </h2>
+            <span style={{ 
+              fontSize: '0.75rem', 
+              padding: '0.3rem 0.75rem', 
+              borderRadius: '20px', 
+              fontWeight: 700,
+              background: smtpStatus?.verified ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+              color: smtpStatus?.verified ? '#059669' : '#d97706',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem'
+            }}>
+              {smtpStatus?.verified ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
+              {smtpStatus?.verified ? 'SMTP Active & Connected' : smtpStatus?.hasPassword ? 'Verifying...' : 'App Password Needed in .env'}
+            </span>
+          </div>
+
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1.25rem', lineHeight: 1.6 }}>
+            The system sends real-time transactional emails via Google SMTP (<code>smtp.gmail.com:465</code> SSL) for OTP logins, intern onboarding credentials, and fee payment receipts.
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div style={{ padding: '1rem', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>SMTP Sender Email</div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '4px' }}>
+                {smtpStatus?.senderEmail || 'neha.12ghadge@gmail.com'}
+              </div>
+            </div>
+
+            <div style={{ padding: '1rem', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>SMTP Server & Port</div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '4px' }}>
+                smtp.gmail.com:465 (SSL)
+              </div>
+            </div>
+
+            <div style={{ padding: '1rem', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>App Password Status</div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: smtpStatus?.hasPassword ? 'var(--color-success)' : 'var(--color-warning)', marginTop: '4px' }}>
+                {smtpStatus?.hasPassword ? 'Configured in backend/.env' : 'Missing in backend/.env'}
+              </div>
+            </div>
+          </div>
+
+          {/* Test Email Dispatch Form */}
+          <div style={{ background: '#f8fafc', padding: '1.25rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+            <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
+              Send Live Test Email
+            </div>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.85rem' }}>
+              Test your Gmail SMTP connection by sending a real-time verification email to any Gmail ID.
+            </p>
+
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <input 
+                type="email" 
+                className="form-control" 
+                style={{ maxWidth: '320px' }} 
+                value={testEmailAddr} 
+                onChange={e => setTestEmailAddr(e.target.value)} 
+                placeholder="Enter recipient Gmail ID"
+              />
+              <button 
+                type="button" 
+                className="btn btn-primary btn-sm" 
+                onClick={handleSendTestEmail} 
+                disabled={testEmailLoading || !testEmailAddr}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1rem' }}
+              >
+                <Send size={15} />
+                {testEmailLoading ? 'Dispatching...' : 'Send Test Email'}
+              </button>
+            </div>
+
+            {testEmailResult && (
+              <div style={{ 
+                marginTop: '0.85rem', 
+                padding: '0.65rem 0.85rem', 
+                borderRadius: '6px', 
+                fontSize: '0.82rem',
+                background: testEmailResult.type === 'success' ? '#ecfdf5' : '#fef2f2',
+                color: testEmailResult.type === 'success' ? '#065f46' : '#991b1b',
+                border: `1px solid ${testEmailResult.type === 'success' ? '#a7f3d0' : '#fecaca'}`
+              }}>
+                {testEmailResult.type === 'success' ? '✅ ' : '❌ '}
+                {testEmailResult.message}
+              </div>
+            )}
           </div>
         </div>
       )}

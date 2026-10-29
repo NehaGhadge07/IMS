@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/connection');
 const { authenticateToken, requireRole } = require('../core/auth');
+const { sendFeeReceiptEmail, sendEmail } = require('../core/email');
 
 // Helper to get intern id from user id
 function getInternId(userId) {
@@ -190,6 +191,24 @@ router.post('/:intern_id/payments', authenticateToken, requireRole(['HR', 'Direc
 
     db.exec('COMMIT');
 
+    // Send fee receipt email to intern
+    try {
+      const internUser = db.prepare('SELECT u.name, u.email FROM users u WHERE u.id = ?').get(intern.user_id);
+      if (internUser && internUser.email) {
+        sendFeeReceiptEmail({
+          to: internUser.email,
+          name: internUser.name,
+          amountPaid: amt,
+          receiptNumber: receiptNumber,
+          remainingAmount: newRemainingAmount,
+          nextDueDate: newRemainingAmount > 0 ? nextDueDateStr : null,
+          paymentMode: payment_mode
+        }).catch(e => console.error('Fee receipt email error:', e));
+      }
+    } catch (e) {
+      console.error('Fee receipt email prep error:', e);
+    }
+
     res.json({ 
       message: 'Payment recorded successfully.', 
       receiptNumber, 
@@ -209,7 +228,7 @@ router.post('/reminder/:id', authenticateToken, requireRole(['HR', 'Director']),
 
   try {
     const fee = db.prepare(`
-      SELECT f.*, i.user_id, u.name as intern_name
+      SELECT f.*, i.user_id, u.name as intern_name, u.email as intern_email
       FROM fees f
       JOIN interns i ON f.intern_id = i.id
       JOIN users u ON i.user_id = u.id
@@ -232,7 +251,29 @@ router.post('/reminder/:id', authenticateToken, requireRole(['HR', 'Director']),
       VALUES (?, 'Fee Installment Reminder Alert', ?)
     `).run(fee.user_id, message);
 
-    res.json({ message: `Fee reminder notification sent successfully to ${fee.intern_name}.` });
+    // Send email reminder via SMTP
+    if (fee.intern_email) {
+      sendEmail({
+        to: fee.intern_email,
+        subject: 'IICET Services - Fee Installment Reminder Notice',
+        text: message,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 540px; margin: 0 auto; border: 1px solid #fed7aa; border-radius: 8px; overflow: hidden;">
+            <div style="background: #ea580c; color: #ffffff; padding: 18px 24px;">
+              <h2 style="margin: 0; font-size: 18px;">Fee Installment Reminder Notice</h2>
+            </div>
+            <div style="padding: 24px; color: #334155;">
+              <p>Dear <strong>${fee.intern_name}</strong>,</p>
+              <p style="line-height: 1.5;">This is an institutional reminder from the HR department to clear your pending fee installment of <strong>₹${fee.remaining_amount}</strong> which is due on <strong>${dueDateStr}</strong>.</p>
+              <p>Please clear your dues to ensure uninterrupted internship training and dossier certification.</p>
+              <div style="margin-top: 20px; font-size: 12px; color: #94a3b8;">IICET Services Private Limited • Accounts & HR</div>
+            </div>
+          </div>
+        `
+      }).catch(e => console.error('Fee reminder email error:', e));
+    }
+
+    res.json({ message: `Fee reminder notification and email sent successfully to ${fee.intern_name}.` });
   } catch (error) {
     console.error('Send fee reminder error:', error);
     res.status(500).json({ error: 'Server error sending fee reminder.' });

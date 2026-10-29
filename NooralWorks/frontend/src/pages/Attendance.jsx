@@ -404,12 +404,13 @@ export default function Attendance({ user }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const isIntern = user?.role === 'Intern';
   const isDirector = user?.role === 'Director';
+  const isMentor = user?.role === 'Mentor';
   const isHR = user?.role === 'HR' || isDirector;
 
   const tabParam = searchParams.get('tab');
   const initialTab = tabParam === 'leave' 
     ? 'Leave' 
-    : (tabParam === 'mentor' && (isHR || user?.role === 'Mentor') 
+    : (tabParam === 'mentor' && (isHR || isMentor) 
         ? 'Mentor' 
         : (tabParam === 'hr' && (isDirector || user?.role === 'HR') ? 'HR' : 'Intern'));
   const [activeTab, setActiveTab] = useState(initialTab);
@@ -462,7 +463,8 @@ export default function Attendance({ user }) {
     return interns.filter(i => {
       return (
         i.mentor_id?.toString() === selectedMentor.toString() ||
-        i.mentor_user_id?.toString() === selectedMentor.toString()
+        i.mentor_user_id?.toString() === selectedMentor.toString() ||
+        i.intern_mentor_id?.toString() === selectedMentor.toString()
       );
     });
   }, [interns, selectedMentor]);
@@ -475,7 +477,8 @@ export default function Attendance({ user }) {
       if (found && newMentorId) {
         const matches = (
           found.mentor_id?.toString() === newMentorId.toString() ||
-          found.mentor_user_id?.toString() === newMentorId.toString()
+          found.mentor_user_id?.toString() === newMentorId.toString() ||
+          found.intern_mentor_id?.toString() === newMentorId.toString()
         );
         if (!matches) {
           setSelectedIntern('');
@@ -593,8 +596,8 @@ export default function Attendance({ user }) {
       api.getInterns().then(setInterns).catch(console.error);
       api.getMentors().then(data => {
         setMentors(data);
-        if (user?.role !== 'Director' && data.length > 0) {
-          setSelectedMentor(data[0].user_id.toString());
+        if (user?.role === 'Mentor' && user?.id) {
+          setSelectedMentor(user.id.toString());
         }
       }).catch(console.error);
     }
@@ -1319,7 +1322,7 @@ export default function Attendance({ user }) {
           >
             <Users size={16} /> Intern Attendance
           </button>
-          {(isHR || user?.role === 'Mentor') && (
+          {(isHR || isMentor) && (
             <button 
               className={`btn ${activeTab === 'Mentor' ? 'btn-primary' : 'btn-secondary'} btn-sm`} 
               onClick={() => { handleTabChange('Mentor'); handleBackToAllTrainers(); }}

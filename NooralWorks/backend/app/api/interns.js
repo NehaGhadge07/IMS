@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/connection');
 const { authenticateToken, requireRole, hashPassword } = require('../core/auth');
+const { sendInternWelcomeEmail, sendStaffWelcomeEmail } = require('../core/email');
 const multer = require('multer');
 const path = require('path');
 
@@ -23,7 +24,7 @@ router.get('/', authenticateToken, (req, res) => {
       SELECT i.id, i.batch, i.training_time, i.department, i.technology, i.status, i.joining_date, i.completion_date,
              i.linkedin_url, i.github_url, i.resume_url, i.mobile_number, i.college_name,
              u.id as user_id, u.name, u.email, u.plain_password, u.status as user_status,
-             m.id as mentor_id, mu.name as mentor_name,
+             COALESCE(mu.id, i.mentor_id) as mentor_id, mu.id as mentor_user_id, m.id as mentor_table_id, mu.name as mentor_name,
              (SELECT a.status FROM attendance a WHERE a.intern_id = i.id AND a.date = date('now') LIMIT 1) as attendance_status_today,
              (SELECT a.check_in_time FROM attendance a WHERE a.intern_id = i.id AND a.date = date('now') LIMIT 1) as check_in_today,
              (SELECT f.status FROM fees f WHERE f.intern_id = i.id LIMIT 1) as fee_status,
@@ -182,6 +183,18 @@ router.post('/mentors', authenticateToken, requireRole(['HR', 'Director']), uplo
     }
     
     db.exec('COMMIT');
+
+    // Asynchronously send credentials email to trainer/staff
+    sendStaffWelcomeEmail({
+      to: email.trim().toLowerCase(),
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      password: initialPassword,
+      role: assignedRole,
+      department: department ? department.trim() : 'General',
+      technology: technology ? technology.trim() : 'General'
+    }).catch(e => console.error('Staff welcome email error:', e));
+
     res.status(201).json({ message: 'Staff created successfully.', user_id: userId, profile_photo: profilePhoto });
   } catch (error) {
     try { db.exec('ROLLBACK'); } catch (e) {}
@@ -470,6 +483,17 @@ router.post('/', authenticateToken, requireRole(['HR', 'Director']), (req, res) 
 
     // Commit Transaction
     db.exec('COMMIT');
+
+    // Asynchronously send welcome email with credentials to newly created intern
+    sendInternWelcomeEmail({
+      to: email.trim().toLowerCase(),
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      password: password,
+      technology: position.trim(),
+      training_time: training_time ? training_time.trim() : '09:00 AM - 01:00 PM',
+      joining_date: joining_date
+    }).catch(e => console.error('Intern welcome email error:', e));
 
     res.status(201).json({ message: 'Intern created successfully.', internId, userId });
   } catch (error) {

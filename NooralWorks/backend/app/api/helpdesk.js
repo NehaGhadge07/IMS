@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const db = require("../db/connection");
 const { authenticateToken } = require("../core/auth");
+const { sendHelpdeskTicketEmail, sendHelpdeskReplyEmail } = require("../core/email");
 
 // Helper function to send notification safely
 function sendNotification(userId, title, message) {
@@ -234,9 +235,21 @@ router.post("/", authenticateToken, (req, res) => {
         "New Help Desk Query Assigned",
         `${req.user.name} (${req.user.role}) submitted a query for you: "${cleanSubject}" [Priority: ${cleanPriority}]`
       );
+      if (targetUser.email) {
+        sendHelpdeskTicketEmail({
+          to: targetUser.email,
+          recipientName: targetUser.name,
+          ticketId: newQueryId,
+          subjectText: cleanSubject,
+          priority: cleanPriority,
+          category: cleanCategory,
+          senderName: `${req.user.name} (${req.user.role})`,
+          messageText: cleanQueryText
+        }).catch(e => console.error("Helpdesk ticket email error:", e));
+      }
     } else if (resolvedRole) {
       // Notify all active users with this role (e.g. HR or Director)
-      const roleUsers = db.prepare("SELECT id FROM users WHERE role = ? AND status = 'Active'").all(resolvedRole);
+      const roleUsers = db.prepare("SELECT id, name, email FROM users WHERE role = ? AND status = 'Active'").all(resolvedRole);
       for (const u of roleUsers) {
         if (u.id !== req.user.id) {
           sendNotification(
@@ -244,6 +257,18 @@ router.post("/", authenticateToken, (req, res) => {
             `New Help Desk Query for ${resolvedRole}`,
             `${req.user.name} (${req.user.role}) submitted a ${cleanCategory} query: "${cleanSubject}"`
           );
+          if (u.email) {
+            sendHelpdeskTicketEmail({
+              to: u.email,
+              recipientName: u.name,
+              ticketId: newQueryId,
+              subjectText: cleanSubject,
+              priority: cleanPriority,
+              category: cleanCategory,
+              senderName: `${req.user.name} (${req.user.role})`,
+              messageText: cleanQueryText
+            }).catch(e => console.error("Helpdesk ticket email error:", e));
+          }
         }
       }
     }
@@ -381,6 +406,24 @@ router.put("/:id", authenticateToken, (req, res) => {
         notifTitle,
         `${req.user.name} (${req.user.role}) has updated your query "${queryItem.subject || queryItem.query_text.substring(0, 35)}". Status: ${newStatus}.${solutionPreview}`
       );
+
+      // Send email update to requester
+      try {
+        const requester = db.prepare('SELECT name, email FROM users WHERE id = ?').get(queryItem.user_id);
+        if (requester && requester.email) {
+          sendHelpdeskReplyEmail({
+            to: requester.email,
+            recipientName: requester.name,
+            ticketId: queryId,
+            subjectText: queryItem.subject || 'Support Query',
+            replyByName: `${req.user.name} (${req.user.role})`,
+            replyText: newAnswer || `Status changed to ${newStatus}`,
+            status: newStatus
+          }).catch(e => console.error("Helpdesk reply email error:", e));
+        }
+      } catch (e) {
+        console.error("Helpdesk reply email prep error:", e);
+      }
     }
 
     logHelpdeskActivity(

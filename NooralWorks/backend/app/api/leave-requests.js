@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../db/connection');
 const { authenticateToken, requireRole } = require('../core/auth');
 const { syncLeaveToAttendance, removeLeaveFromAttendance } = require('../core/leave-sync');
+const { sendLeaveApplicationAlertEmail, sendLeaveDecisionEmail } = require('../core/email');
 
 const VALID_TYPES = ['Casual', 'Sick', 'Emergency', 'Work From Home', 'Other'];
 const VALID_STATUSES = ['Pending', 'Approved', 'Rejected', 'Cancelled'];
@@ -90,9 +91,23 @@ router.post('/', authenticateToken, (req, res) => {
       return res.status(201).json({ id: result.lastInsertRowid, message: 'Director leave notice recorded and notified to HR successfully.' });
     } else {
       // Normal employee request: Notify HR and Director that approval is pending
-      const hrUsers = db.prepare("SELECT id FROM users WHERE role IN ('HR', 'Director') AND status = 'Active'").all();
+      const hrUsers = db.prepare("SELECT id, name, email FROM users WHERE role IN ('HR', 'Director') AND status = 'Active'").all();
       const notify = db.prepare('INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)');
-      hrUsers.forEach(({ id }) => notify.run(id, 'Leave request pending', `${req.user.name} requested ${totalDays} day(s) of ${leave_type} leave.`));
+      hrUsers.forEach(({ id, name, email }) => {
+        notify.run(id, 'Leave request pending', `${req.user.name} requested ${totalDays} day(s) of ${leave_type} leave.`);
+        if (email) {
+          sendLeaveApplicationAlertEmail({
+            to: email,
+            reviewerName: name,
+            applicantName: req.user.name,
+            applicantRole: req.user.role === 'Mentor' ? 'Trainer' : req.user.role,
+            leaveType: leave_type,
+            startDate: start_date,
+            endDate: end_date,
+            reason: reason.trim()
+          }).catch(e => console.error('Leave alert email error:', e));
+        }
+      });
       return res.status(201).json({ id: result.lastInsertRowid, message: 'Leave request submitted for approval.' });
     }
   } catch (error) {
@@ -182,6 +197,26 @@ router.post('/:id/review', authenticateToken, requireRole(['Director', 'HR', 'Me
 
     db.prepare('INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)')
       .run(request.user_id, `Leave request ${status.toLowerCase()}`, `Your ${request.leave_type} leave request for ${request.start_date} to ${request.end_date} was ${status.toLowerCase()}.`);
+
+    // Send Real-time Email Decision Notification to the Applicant
+    try {
+      const applicantUser = db.prepare('SELECT name, email FROM users WHERE id = ?').get(request.user_id);
+      if (applicantUser && applicantUser.email) {
+        sendLeaveDecisionEmail({
+          to: applicantUser.email,
+          applicantName: applicantUser.name,
+          leaveType: request.leave_type,
+          startDate: request.start_date,
+          endDate: request.end_date,
+          decision: status,
+          reviewedByName: req.user.name,
+          notes: review_notes.trim() || null
+        }).catch(e => console.error('Leave decision email error:', e));
+      }
+    } catch (e) {
+      console.error('Leave decision email prep error:', e);
+    }
+
     res.json({ message: `Leave request ${status.toLowerCase()}.` });
   } catch (error) {
     console.error('Review leave request error:', error);
