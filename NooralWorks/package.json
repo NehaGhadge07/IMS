@@ -7,8 +7,8 @@
     "backend:run": "cd backend && npm run dev",
     "frontend:install": "cd frontend && npm install",
     "frontend:run": "cd frontend && npm run dev",
-    "build": "npm run backend:install && npm run frontend:install && npm run frontend:build",
     "frontend:build": "cd frontend && npm run build",
+    "build": "cd backend && npm install && cd ../frontend && npm install && npm run build",
     "start": "cd backend && npm start",
     "dev": "npx concurrently \"npm run backend:run\" \"npm run frontend:run\""
   },
