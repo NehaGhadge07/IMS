@@ -478,23 +478,36 @@ router.get('/me', authenticateToken, (req, res) => {
 
     // Add additional details based on role
     let details = {};
+    const getDefaultDept = (role, currentDept) => {
+      if (currentDept && currentDept !== 'General') return currentDept;
+      if (role === 'Intern') return 'Intern';
+      if (role === 'HR') return 'Human Resources';
+      if (role === 'Mentor') return 'Employee';
+      if (role === 'Director') return 'Director';
+      return currentDept || 'General';
+    };
+
     if (user.role === 'Intern') {
       details = db.prepare('SELECT * FROM interns WHERE user_id = ?').get(user.id) || {};
       details.mobile_number = details.mobile_number || user.mobile_number || null;
-      details.department = details.department || user.department || 'General';
+      details.department = getDefaultDept('Intern', details.department || user.department);
       user.mobile_number = user.mobile_number || details.mobile_number || null;
     } else if (user.role === 'Mentor') {
       details = db.prepare('SELECT * FROM mentors WHERE user_id = ?').get(user.id) || {};
       details.mobile_number = details.mobile_number || user.mobile_number || null;
+      details.department = getDefaultDept('Mentor', details.department || user.department);
       user.mobile_number = user.mobile_number || details.mobile_number || null;
     } else if (user.role === 'HR' || user.role === 'Director') {
       details = {
-        department: user.department,
+        department: getDefaultDept(user.role, user.department),
         designation: user.designation,
         joining_date: user.joining_date,
         mobile_number: user.mobile_number
       };
     }
+    
+    // Ensure user.department also reflects the exact role-based department
+    user.department = details.department || getDefaultDept(user.role, user.department);
     
     res.json({ user: { ...user, details } });
   } catch (error) {

@@ -592,20 +592,26 @@ export default function UserProfile({ user, setUser }) {
               </>
             )}
 
-            {/* Department (if present) */}
-            {(profileData.role === 'Mentor' || profileData.role === 'HR' || profileData.role === 'Intern') && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
-                <div style={{ width: '40px', height: '40px', borderRadius: 'var(--radius-sm)', background: 'linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-primary)', flexShrink: 0 }}>
-                  <Briefcase size={18} />
-                </div>
-                <div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Department</div>
-                  <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginTop: '2px' }}>
-                    {details?.department || 'Software Engineering'}
-                  </div>
+            {/* Department (for all roles) */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+              <div style={{ width: '40px', height: '40px', borderRadius: 'var(--radius-sm)', background: 'linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-primary)', flexShrink: 0 }}>
+                <Briefcase size={18} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Department</div>
+                <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginTop: '2px' }}>
+                  {(() => {
+                    const current = details?.department || profileData?.department;
+                    if (current && current !== 'General') return current;
+                    if (profileData?.role === 'Intern') return 'Intern';
+                    if (profileData?.role === 'HR') return 'Human Resources';
+                    if (profileData?.role === 'Mentor') return 'Employee';
+                    if (profileData?.role === 'Director') return 'Director';
+                    return 'Intern';
+                  })()}
                 </div>
               </div>
-            )}
+            </div>
 
             {/* Director specifics */}
             {profileData.role === 'Director' && (

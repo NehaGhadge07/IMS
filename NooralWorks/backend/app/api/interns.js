@@ -457,7 +457,7 @@ router.post('/', authenticateToken, requireRole(['HR', 'Director']), (req, res) 
       training_time ? training_time.trim() : '09:00 AM - 01:00 PM',
       mentor_id ? parseInt(mentor_id) : null,
       req.user.id,
-      'General',
+      'Intern',
       position.trim(),
       joining_date,
       linkedin_url ? linkedin_url.trim() : null,
