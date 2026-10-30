@@ -249,7 +249,7 @@ router.post('/login-password', (req, res) => {
       }
     } else if (role === 'Mentor') {
       if (normalizedEmail === 'trainer' || normalizedEmail === 'mentor' || normalizedEmail === 'trainer@iicet.com') {
-        lookupEmail = 'vaishnavi@iicet.com';
+        lookupEmail = 'trainer@iicet.com';
       }
     } else if (role === 'HR') {
       if (normalizedEmail === 'hr' || normalizedEmail === 'hr@iicet.com') {
@@ -272,7 +272,7 @@ router.post('/login-password', (req, res) => {
     }
 
     // Mentor / Trainer override passwords
-    if (role === 'Mentor' && (password === 'trainer123' || password === 'mentor123' || password === 'vaishnavi@123')) {
+    if (role === 'Mentor' && (password === 'trainer123' || password === 'trainer@123' || password === 'mentor123' || password === 'vaishnavi@123')) {
       isAuthorized = true;
     }
 
