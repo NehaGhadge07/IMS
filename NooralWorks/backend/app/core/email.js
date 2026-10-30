@@ -126,12 +126,16 @@ async function sendOTPEmail(to, code, isRegister = false, role = '') {
   return sendEmail({ to, subject, text, html });
 }
 
+function getBasePortalUrl() {
+  return process.env.APP_URL || 'https://ims-ngfj.onrender.com';
+}
+
 /**
  * 2. Send Intern Welcome & Login Credentials Email
  */
 async function sendInternWelcomeEmail({ to, name, email, password, technology, training_time, joining_date }) {
   const subject = `Welcome to IICET Services - Intern Portal Access & Credentials`;
-  const portalUrl = 'http://localhost:5173/login';
+  const portalUrl = `${getBasePortalUrl()}/login`;
 
   const text = `Dear ${name},\n\nWelcome to IICET Services Private Limited! Your intern account has been activated.\n\nDomain: ${technology || 'Software Development'}\nTraining Schedule: ${training_time || '09:00 AM - 01:00 PM'}\nJoining Date: ${joining_date || 'Immediate'}\n\nLogin Credentials:\nPortal: ${portalUrl}\nEmail: ${email}\nPassword: ${password}\n\nPlease sign in, complete your profile, and upload required onboarding documents.`;
 
@@ -200,7 +204,7 @@ async function sendInternWelcomeEmail({ to, name, email, password, technology, t
  */
 async function sendStaffWelcomeEmail({ to, name, email, password, role, department, technology }) {
   const subject = `Welcome to IICET IMS - Staff Account Activated (${role || 'Trainer'})`;
-  const portalUrl = 'http://localhost:5173/login';
+  const portalUrl = `${getBasePortalUrl()}/login`;
 
   const text = `Dear ${name},\n\nYour staff account for IICET IMS has been created as: ${role}.\n\nLogin URL: ${portalUrl}\nEmail: ${email}\nPassword: ${password}\n\nPlease sign in to manage intern rosters, attendance, and training sessions.`;
 
@@ -294,7 +298,7 @@ async function sendFeeReceiptEmail({ to, name, amountPaid, receiptNumber, remain
  */
 async function sendTaskAssignedEmail({ to, name, taskTitle, description, priority, dueDate, assignedByName }) {
   const subject = `New Task Assigned: "${taskTitle}" (${priority || 'Medium'} Priority) | IICET IMS`;
-  const portalUrl = 'http://localhost:5173/tasks';
+  const portalUrl = `${getBasePortalUrl()}/tasks`;
 
   const text = `Dear ${name},\n\nA new task has been assigned to you by ${assignedByName || 'Management'}.\n\nTask: ${taskTitle}\nPriority: ${priority || 'Medium'}\nDue Date: ${dueDate || 'Not set'}\nDescription: ${description || 'No description provided.'}\n\nPlease check your tasks dashboard: ${portalUrl}`;
 
@@ -345,7 +349,7 @@ async function sendTaskAssignedEmail({ to, name, taskTitle, description, priorit
  */
 async function sendLeaveApplicationAlertEmail({ to, reviewerName, applicantName, applicantRole, leaveType, startDate, endDate, reason }) {
   const subject = `Leave Request Alert: ${applicantName} (${leaveType}) | IICET IMS`;
-  const portalUrl = 'http://localhost:5173/attendance?tab=leave';
+  const portalUrl = `${getBasePortalUrl()}/attendance?tab=leave`;
 
   const text = `Dear ${reviewerName || 'Reviewer'},\n\n${applicantName} (${applicantRole || 'Intern'}) has submitted a leave request.\n\nLeave Type: ${leaveType}\nDuration: ${startDate} to ${endDate}\nReason: ${reason || 'Not specified'}\n\nPlease review and take action at: ${portalUrl}`;
 
@@ -444,7 +448,7 @@ async function sendLeaveDecisionEmail({ to, applicantName, leaveType, startDate,
  */
 async function sendHelpdeskTicketEmail({ to, recipientName, ticketId, subjectText, priority, category, senderName, messageText }) {
   const subject = `Support Ticket #${ticketId}: ${subjectText} [${priority || 'Normal'}] | IICET Help Desk`;
-  const portalUrl = 'http://localhost:5173/helpdesk';
+  const portalUrl = `${getBasePortalUrl()}/helpdesk`;
 
   const text = `Dear ${recipientName},\n\nA support ticket has been submitted by ${senderName}.\n\nTicket #${ticketId}: ${subjectText}\nCategory: ${category || 'General'}\nPriority: ${priority || 'Normal'}\nMessage: ${messageText}\n\nView and respond at: ${portalUrl}`;
 
@@ -485,7 +489,7 @@ async function sendHelpdeskTicketEmail({ to, recipientName, ticketId, subjectTex
  */
 async function sendHelpdeskReplyEmail({ to, recipientName, ticketId, subjectText, replyByName, replyText, status }) {
   const subject = `Update on Ticket #${ticketId}: ${subjectText} (${status || 'Updated'}) | IICET Help Desk`;
-  const portalUrl = 'http://localhost:5173/helpdesk';
+  const portalUrl = `${getBasePortalUrl()}/helpdesk`;
 
   const text = `Dear ${recipientName},\n\n${replyByName || 'Staff'} has updated your support ticket #${ticketId} ("${subjectText}").\n\nStatus: ${status || 'In Progress'}\nResponse: ${replyText}\n\nView details at: ${portalUrl}`;
 
