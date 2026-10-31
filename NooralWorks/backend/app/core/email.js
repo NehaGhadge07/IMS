@@ -13,10 +13,10 @@ function getTransporter() {
   }
 
   return nodemailer.createTransport({
-    service: 'gmail',
     host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
+    port: 587,          // Port 587 (STARTTLS) — works on Render free tier (port 465 SSL is blocked)
+    secure: false,      // false = STARTTLS (upgraded after connection)
+    requireTLS: true,   // Force TLS upgrade — prevents plain-text fallback
     auth: {
       user: user,
       pass: pass
